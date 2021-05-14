@@ -1,0 +1,28 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  BINARY: ws-proxy
+
+tasks:
+  # install dependencies
+  install:
+    cmds:
+      - go mod vendor
+
+  # build binary
+  build:
+    cmds:
+      - go build -o {{.BINARY}} *.go
+
+  # run
+  run:
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}}
+
+  # clear build output
+  clean:
+    cmds:
+      - rm -f {{.BINARY}}
