@@ -16,6 +16,24 @@ tasks:
     cmds:
       - go build -o {{.BINARY}} *.go
 
+  build-darwin-amd64:
+    cmds:
+      - go build -o {{.BINARY}} *.go
+    env:
+      CGO_ENABLED: 0
+      GO111MODULE: on
+      GOARCH: amd64
+      GOOS: darwin
+
+  build-darwin-arm64:
+    cmds:
+      - go build -o {{.BINARY}} *.go
+    env:
+      CGO_ENABLED: 0
+      GO111MODULE: on
+      GOARCH: arm64
+      GOOS: darwin
+
   # run
   run:
     deps: [build]
@@ -26,3 +44,8 @@ tasks:
   clean:
     cmds:
       - rm -f {{.BINARY}}
+
+  # run unit test
+  test:
+    cmds:
+      - go test -v ./...
