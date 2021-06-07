@@ -103,10 +103,10 @@ func (s *sessionImpl) Start() {
 
 	// forward received message
 	errClientCh := make(chan error, 1)
-	go s.forwardMessage(connBackend, connClient, errClientCh)
+	go s.forwardMessage(connBackend, connClient, errClientCh, s.proxy.ExecuteReceivedMessageMiddlewares)
 	// forward sent message
 	errBackendCh := make(chan error, 1)
-	go s.forwardMessage(connClient, connBackend, errBackendCh)
+	go s.forwardMessage(connClient, connBackend, errBackendCh, s.proxy.ExecuteSentMessageMiddlewares)
 
 	// wait for errors
 	var errMsg string
@@ -158,7 +158,6 @@ func (s *sessionImpl) connectBackend() (*websocket.Conn, *websocket.Conn, error)
 
 	s.logInfof("connected to backend: %s", s.backendURL)
 
-
 	// upgrade connection with client
 	upgrader := s.upgrader
 	if upgrader == nil {
@@ -181,6 +180,7 @@ func (s *sessionImpl) connectBackend() (*websocket.Conn, *websocket.Conn, error)
 func (s *sessionImpl) forwardMessage(
 	fromConn, toConn *websocket.Conn,
 	errCh chan error,
+	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
 ) {
 	for {
 		// read message from source
@@ -192,7 +192,7 @@ func (s *sessionImpl) forwardMessage(
 
 		switch msgType {
 		case websocket.TextMessage:
-			if ok := s.forwardTextMessage(toConn, readMsgBytes); !ok {
+			if ok := s.forwardTextMessage(toConn, readMsgBytes, executeMiddlewaresFn); !ok {
 				return
 			}
 		default:
@@ -203,11 +203,15 @@ func (s *sessionImpl) forwardMessage(
 
 // forwardTextMessage forwards message to 'toConn'
 // Returns true if OK, false otherwise.
-func (s *sessionImpl) forwardTextMessage(toConn *websocket.Conn, data []byte) bool {
+func (s *sessionImpl) forwardTextMessage(
+	toConn *websocket.Conn,
+	data []byte,
+	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+) bool {
 	dataValue, _ := v8go.NewValue(s.iso, string(data))
 
 	// call middleware
-	result, err := s.proxy.ExecuteReceivedMessageMiddlewares(dataValue)
+	result, err := executeMiddlewaresFn(dataValue)
 	if err != nil {
 		s.logErrorf("failed to execute middleware: %v", err)
 		return false

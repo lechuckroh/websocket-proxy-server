@@ -5,6 +5,8 @@ import (
 	"rogchap.com/v8go"
 )
 
+type ExecuteMiddlewaresFn func(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
+
 type Proxy interface {
 	GetOnInitFunctionCallback() v8go.FunctionCallback
 	GetOnDestroyFunctionCallback() v8go.FunctionCallback
