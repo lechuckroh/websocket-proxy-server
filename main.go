@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// parse flags
-	flagListen := flag.String("l", ":80", "listening address")
+	flagListen := flag.String("l", ":8000", "listening address")
 	flagBackend := flag.String("b", "", "Target backend URL")
 	flagScriptFile := flag.String("f", "", "Script file to run")
 	flagRecordDir := flag.String("r", "", "Directory to store traffic records")

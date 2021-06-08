@@ -4,6 +4,11 @@ version: '3'
 
 vars:
   BINARY: ws-proxy
+  OPTS_RELEASE: -ldflags "-s -w"
+
+env:
+  DOCKER_IMAGE_BASE: lechuckroh/ws-proxy
+  DOCKER_IMAGE_TAG: latest
 
 tasks:
   # install dependencies
@@ -14,7 +19,7 @@ tasks:
   # build binary
   build:
     cmds:
-      - go build -o {{.BINARY}} *.go
+      - go build {{.OPTS_RELEASE}} -o {{.BINARY}} *.go
 
   build-darwin-amd64:
     cmds:
@@ -33,6 +38,26 @@ tasks:
       GO111MODULE: on
       GOARCH: arm64
       GOOS: darwin
+
+  build-linux-amd64:
+    cmds:
+      - go build -o {{.BINARY}} *.go
+    env:
+      CGO_ENABLED: 0
+      GO111MODULE: on
+      GOARCH: amd64
+      GOOS: linux
+
+  # docker
+  build-docker:
+    cmds:
+      - docker build -t "$DOCKER_IMAGE_BASE:$DOCKER_IMAGE_TAG" .
+
+  run-docker:
+    cmds:
+      - docker run --rm -it -v `pwd`/scripts:/app/scripts -p $PORT:8000 "$DOCKER_IMAGE_BASE:$DOCKER_IMAGE_TAG" /app/ws-proxy -l :8000 {{.CLI_ARGS}}
+    env:
+      PORT: 8000
 
   # run
   run:

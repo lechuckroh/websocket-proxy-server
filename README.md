@@ -7,7 +7,7 @@
 $ task install && task build
 
 # run
-$ ./ws-proxy -l :80 -b wss://wss.example.com -f scripts/default.js
+$ ./ws-proxy -l :8000 -b wss://wss.example.com -f scripts/default.js
 ```
 
 > Install [Task](https://taskfile.dev) to use `task` command.
@@ -24,7 +24,7 @@ Set script file for middleware.
 
 ### `-l`, `env:LISTEN`
 
-Set listening address. default value is `:80`.
+Set listening address. default value is `:8000`.
 
 Format: `<ip address>:<port>`
 
@@ -32,3 +32,12 @@ Format: `<ip address>:<port>`
 
 Directory to store traffic records in JSON format.
 feat
+
+## Run using docker
+
+```bash
+$ PORT=1234 task run-docker -- -b wss://wss.example.com
+```
+
+* Set `PORT` environment variable to override default listening port(`8000`).
+* Append custom CLI options after `--`.
