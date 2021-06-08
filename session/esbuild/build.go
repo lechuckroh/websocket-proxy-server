@@ -27,7 +27,6 @@ func (b *CompilerImpl) Transform(filename string) api.TransformResult {
 	buildResult := api.Transform(string(bytes), api.TransformOptions{
 		Loader: api.LoaderTS,
 	})
-	log.Printf(string(buildResult.Code))
 	return buildResult
 }
 
@@ -52,7 +51,6 @@ func (b *CompilerImpl) Compile(filename string) (string, api.BuildResult) {
 	if bytes, err := ioutil.ReadFile(outputFile); err != nil {
 		return "", result
 	} else {
-		log.Printf(string(bytes))
 		return string(bytes), result
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"rogchap.com/v8go"
+	"time"
 )
 
 var (
@@ -25,30 +26,21 @@ type Session interface {
 	Start()
 }
 
-type sessionImpl struct {
-	dialer     *websocket.Dialer
-	upgrader   *websocket.Upgrader
-	backendURL *url.URL
-	script     string
-	sessionID  string
-	respWriter http.ResponseWriter
-	request    *http.Request
-	iso        *v8go.Isolate
-	v8Context  *v8go.Context
-	proxy      proxy.Proxy
+type Opts struct {
+	TargetURL  *url.URL
+	Script     string
+	RecordDir  string
+	RespWriter http.ResponseWriter
+	Request    *http.Request
 }
 
-func NewSession(
-	targetURL *url.URL,
-	script string,
-	rw http.ResponseWriter,
-	req *http.Request,
-) (Session, error) {
-	if targetURL == nil {
+func NewSession(opts *Opts) (Session, error) {
+	if opts.TargetURL == nil {
 		return nil, errors.New("targetURL is not set")
 	}
 
-	backendURL := *targetURL
+	req := opts.Request
+	backendURL := *opts.TargetURL
 	backendURL.Fragment = req.URL.Fragment
 	backendURL.Path = req.URL.Path
 	backendURL.RawQuery = req.URL.RawQuery
@@ -56,12 +48,27 @@ func NewSession(
 	return &sessionImpl{
 		dialer:     DefaultDialer,
 		upgrader:   DefaultUpgrader,
-		respWriter: rw,
+		recordDir:  opts.RecordDir,
+		respWriter: opts.RespWriter,
 		request:    req,
 		backendURL: &backendURL,
-		script:     script,
+		script:     opts.Script,
 		sessionID:  uuid.NewV4().String(),
 	}, nil
+}
+
+type sessionImpl struct {
+	dialer           *websocket.Dialer
+	upgrader         *websocket.Upgrader
+	backendURL       *url.URL
+	script           string
+	sessionID        string
+	recordDir        string
+	respWriter       http.ResponseWriter
+	request          *http.Request
+	iso              *v8go.Isolate
+	v8Context        *v8go.Context
+	proxy            proxy.Proxy
 }
 
 func (s *sessionImpl) responseHttpError(msg string, err error, code int) {
@@ -101,12 +108,24 @@ func (s *sessionImpl) Start() {
 		return
 	}
 
+	// messageWriter
+	receivedMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("recv"))
+	sentMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("sent"))
+	if err := receivedMsgWriter.Init(); err != nil {
+		s.responseHttpError("failed to create receivedMsgWriter", err, http.StatusInternalServerError)
+		return
+	}
+	if err := sentMsgWriter.Init(); err != nil {
+		s.responseHttpError("failed to create sentMsgWriter", err, http.StatusInternalServerError)
+		return
+	}
+
 	// forward received message
 	errClientCh := make(chan error, 1)
-	go s.forwardMessage(connBackend, connClient, errClientCh, s.proxy.ExecuteReceivedMessageMiddlewares)
+	go s.forwardMessage(connBackend, connClient, errClientCh, s.proxy.ExecuteReceivedMessageMiddlewares, receivedMsgWriter)
 	// forward sent message
 	errBackendCh := make(chan error, 1)
-	go s.forwardMessage(connClient, connBackend, errBackendCh, s.proxy.ExecuteSentMessageMiddlewares)
+	go s.forwardMessage(connClient, connBackend, errBackendCh, s.proxy.ExecuteSentMessageMiddlewares, sentMsgWriter)
 
 	// wait for errors
 	var errMsg string
@@ -127,6 +146,14 @@ func (s *sessionImpl) Start() {
 
 	s.logErrorf("connection closed: %v", errMsg)
 
+}
+
+func (s *sessionImpl) getFilenameGenerator(name string) FilenameGenerator {
+	idx := 0
+	return func() string {
+		idx++
+		return fmt.Sprintf("%d_%s_%05d.txt", time.Now().Unix(), name, idx)
+	}
 }
 
 func (s *sessionImpl) isCloseError(err error) bool {
@@ -181,11 +208,18 @@ func (s *sessionImpl) forwardMessage(
 	fromConn, toConn *websocket.Conn,
 	errCh chan error,
 	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+	messageWriter MessageWriter,
 ) {
 	for {
 		// read message from source
 		msgType, readMsgBytes, err := fromConn.ReadMessage()
 		if err != nil {
+			errCh <- err
+			return
+		}
+
+		if err := messageWriter.Write(readMsgBytes); err != nil {
+			s.logErrorf("failed to record message: %v", err)
 			errCh <- err
 			return
 		}

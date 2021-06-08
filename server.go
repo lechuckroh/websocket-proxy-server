@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/lechuckroh/websocket-proxy-server/session"
-	esbuild2 "github.com/lechuckroh/websocket-proxy-server/session/esbuild"
+	"github.com/lechuckroh/websocket-proxy-server/session/esbuild"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,6 +12,7 @@ import (
 type sessionHandler struct {
 	BackendURL     *url.URL
 	ScriptFilename string
+	RecordDir      string
 }
 
 func (h *sessionHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -21,7 +22,14 @@ func (h *sessionHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s, err := session.NewSession(h.BackendURL, code, rw, req)
+	opts := session.Opts{
+		TargetURL:  h.BackendURL,
+		Script:     code,
+		RecordDir:  h.RecordDir,
+		RespWriter: rw,
+		Request:    req,
+	}
+	s, err := session.NewSession(&opts)
 	if err != nil {
 		log.Printf("[ERR] failed to create session: %v", err)
 		return
@@ -35,7 +43,7 @@ func (h *sessionHandler) compileScript() (string, error) {
 		return "", nil
 	}
 
-	compiler := esbuild2.CompilerImpl{}
+	compiler := esbuild.CompilerImpl{}
 	code, buildResult := compiler.Compile(h.ScriptFilename)
 
 	errorCount := len(buildResult.Errors)
@@ -67,6 +75,7 @@ func StartServer(
 	handler := &sessionHandler{
 		BackendURL:     backendURL,
 		ScriptFilename: scriptFilename,
+		RecordDir:      recordDir,
 	}
 	if err := http.ListenAndServe(listenAddr, handler); err != nil {
 		log.Fatal(err)

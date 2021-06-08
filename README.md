@@ -30,8 +30,8 @@ Format: `<ip address>:<port>`
 
 ### `-r`, `env:RECORD_DIR`
 
-Directory to store traffic records in JSON format.
-feat
+Directory to store traffic records in text format.
+
 
 ## Run using docker
 
