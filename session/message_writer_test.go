@@ -4,26 +4,26 @@ import "testing"
 
 func TestIsJSON(t *testing.T) {
 	type TestData struct {
-		Input    string
-		IsJSON   bool
+		Input  string
+		IsJSON bool
 	}
 
 	testDataList := []TestData{
 		{
-			Input:    "123",
-			IsJSON:   false,
+			Input:  "123",
+			IsJSON: false,
 		},
 		{
-			Input:    `{"foo": "bar"}`,
-			IsJSON:   true,
+			Input:  `{"foo": "bar"}`,
+			IsJSON: true,
 		},
 		{
-			Input:    `[1, 2]`,
-			IsJSON:   true,
+			Input:  `[1, 2]`,
+			IsJSON: true,
 		},
 		{
-			Input:    `"[1, 2]"`,
-			IsJSON:   false,
+			Input:  `"[1, 2]"`,
+			IsJSON: false,
 		},
 	}
 

@@ -5,11 +5,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"rogchap.com/v8go"
 )
 
 type MessageWriter interface {
 	Init() error
 	Write([]byte) error
+	WriteValue(*v8go.Value) error
 }
 
 type FilenameGenerator func(ext string) string
@@ -59,6 +61,18 @@ func isJSON(data []byte) bool {
 	}
 }
 
+func (w *messageFileWriter) WriteValue(value *v8go.Value) error {
+	if value.IsString() {
+		return w.Write([]byte(value.String()))
+	}
+
+	if data, err := value.MarshalJSON(); err != nil {
+		return err
+	} else {
+		return w.Write(data)
+	}
+}
+
 type messageDummyWriter struct{}
 
 func (w *messageDummyWriter) Init() error {
@@ -66,5 +80,9 @@ func (w *messageDummyWriter) Init() error {
 }
 
 func (w *messageDummyWriter) Write([]byte) error {
+	return nil
+}
+
+func (w *messageDummyWriter) WriteValue(*v8go.Value) error {
 	return nil
 }

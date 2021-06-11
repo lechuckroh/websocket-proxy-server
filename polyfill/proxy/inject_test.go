@@ -85,7 +85,7 @@ func TestInjectTo(t *testing.T) {
 	_ = proxy.ExecuteOnDestroy()
 
 	// assert log messages
-	expectedLogMessage := strings.Join([]string {
+	expectedLogMessage := strings.Join([]string{
 		"onInit",
 		"receiveMessage1 foo",
 		"receiveMessage2 foo1",

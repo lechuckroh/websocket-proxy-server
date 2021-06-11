@@ -58,17 +58,17 @@ func NewSession(opts *Opts) (Session, error) {
 }
 
 type sessionImpl struct {
-	dialer           *websocket.Dialer
-	upgrader         *websocket.Upgrader
-	backendURL       *url.URL
-	script           string
-	sessionID        string
-	recordDir        string
-	respWriter       http.ResponseWriter
-	request          *http.Request
-	iso              *v8go.Isolate
-	v8Context        *v8go.Context
-	proxy            proxy.Proxy
+	dialer     *websocket.Dialer
+	upgrader   *websocket.Upgrader
+	backendURL *url.URL
+	script     string
+	sessionID  string
+	recordDir  string
+	respWriter http.ResponseWriter
+	request    *http.Request
+	iso        *v8go.Isolate
+	v8Context  *v8go.Context
+	proxy      proxy.Proxy
 }
 
 func (s *sessionImpl) responseHttpError(msg string, err error, code int) {
@@ -109,23 +109,27 @@ func (s *sessionImpl) Start() {
 	}
 
 	// messageWriter
-	receivedMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("recv"))
-	sentMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("sent"))
-	if err := receivedMsgWriter.Init(); err != nil {
+	receiveMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("recv"))
+	sendMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("sent"))
+	if err := receiveMsgWriter.Init(); err != nil {
 		s.responseHttpError("failed to create receivedMsgWriter", err, http.StatusInternalServerError)
 		return
 	}
-	if err := sentMsgWriter.Init(); err != nil {
+	if err := sendMsgWriter.Init(); err != nil {
 		s.responseHttpError("failed to create sentMsgWriter", err, http.StatusInternalServerError)
 		return
 	}
 
 	// forward received message
 	errClientCh := make(chan error, 1)
-	go s.forwardMessage(connBackend, connClient, errClientCh, s.proxy.ExecuteReceivedMessageMiddlewares, receivedMsgWriter)
+	go s.forwardMessage(connBackend, connClient, errClientCh,
+		s.proxy.ExecuteReceivedMessageMiddlewares, s.proxy.ExecuteSendMessageMiddlewares,
+		receiveMsgWriter, sendMsgWriter)
 	// forward sent message
 	errBackendCh := make(chan error, 1)
-	go s.forwardMessage(connClient, connBackend, errBackendCh, s.proxy.ExecuteSentMessageMiddlewares, sentMsgWriter)
+	go s.forwardMessage(connClient, connBackend, errBackendCh,
+		s.proxy.ExecuteSentMessageMiddlewares, s.proxy.ExecuteReceiveMessageMiddlewares,
+		sendMsgWriter, receiveMsgWriter)
 
 	// wait for errors
 	var errMsg string
@@ -207,8 +211,51 @@ func (s *sessionImpl) forwardMessage(
 	fromConn, toConn *websocket.Conn,
 	errCh chan error,
 	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
-	messageWriter MessageWriter,
+	executeResponseMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+	receiveMessageWriter MessageWriter,
+	responseMessageWriter MessageWriter,
 ) {
+	// create responseFunc
+	var resFn *v8go.Value
+	if resFnTpl, err := v8go.NewFunctionTemplate(s.iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+		args := info.Args()
+		if len(args) != 1 {
+			s.logErrorf("responseFunc requires 1 argument")
+			return nil
+		}
+		arg := args[0]
+
+		// call middleware
+		result, err := executeResponseMiddlewaresFn(arg)
+		if err != nil {
+			s.logErrorf("failed to execute response middleware: %v", err)
+			return nil
+		}
+
+		// do not forward if middleware result is null or undefined
+		if result == nil || result.IsNullOrUndefined() {
+			return nil
+		}
+
+		if err := responseMessageWriter.WriteValue(result); err != nil {
+			s.logErrorf("failed to record message: %v", err)
+			errCh <- err
+			return nil
+		}
+
+		if err := s.sendMessage(fromConn, result); err != nil {
+			s.logErrorf("responseFunc failed: %v", err)
+			return nil
+		}
+
+		return nil
+	}); err != nil {
+		s.logErrorf("failed to register responseFunc: %v", err)
+		return
+	} else {
+		resFn = resFnTpl.GetFunction(s.v8Context).Value
+	}
+
 	for {
 		// read message from source
 		msgType, readMsgBytes, err := fromConn.ReadMessage()
@@ -217,7 +264,7 @@ func (s *sessionImpl) forwardMessage(
 			return
 		}
 
-		if err := messageWriter.Write(readMsgBytes); err != nil {
+		if err := receiveMessageWriter.Write(readMsgBytes); err != nil {
 			s.logErrorf("failed to record message: %v", err)
 			errCh <- err
 			return
@@ -225,7 +272,7 @@ func (s *sessionImpl) forwardMessage(
 
 		switch msgType {
 		case websocket.TextMessage:
-			if ok := s.forwardTextMessage(toConn, readMsgBytes, executeMiddlewaresFn); !ok {
+			if ok := s.forwardTextMessage(toConn, readMsgBytes, executeMiddlewaresFn, resFn); !ok {
 				return
 			}
 		default:
@@ -240,11 +287,13 @@ func (s *sessionImpl) forwardTextMessage(
 	toConn *websocket.Conn,
 	data []byte,
 	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+	resFn *v8go.Value,
 ) bool {
 	dataValue, _ := v8go.NewValue(s.iso, string(data))
 
 	// call middleware
-	result, err := executeMiddlewaresFn(dataValue)
+	// arguments: (message, responseFunc)
+	result, err := executeMiddlewaresFn(dataValue, resFn)
 	if err != nil {
 		s.logErrorf("failed to execute middleware: %v", err)
 		return false
@@ -256,12 +305,7 @@ func (s *sessionImpl) forwardTextMessage(
 	}
 
 	// forward message to toConn
-	if result.IsString() {
-		err = toConn.WriteMessage(websocket.TextMessage, []byte(result.String()))
-	} else {
-		err = toConn.WriteJSON(result)
-	}
-
+	err = s.sendMessage(toConn, result)
 	if err != nil {
 		s.logErrorf("failed to forward message: %v", err)
 		return false
@@ -280,4 +324,12 @@ func (s *sessionImpl) logInfof(format string, args ...interface{}) {
 
 func (s *sessionImpl) logErrorf(format string, args ...interface{}) {
 	s.log(fmt.Sprintf(format, args...))
+}
+
+func (s *sessionImpl) sendMessage(conn *websocket.Conn, message *v8go.Value) error {
+	if message.IsString() {
+		return conn.WriteMessage(websocket.TextMessage, []byte(message.String()))
+	} else {
+		return conn.WriteJSON(message)
+	}
 }

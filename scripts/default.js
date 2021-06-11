@@ -4,10 +4,10 @@ proxy.addReceivedMessageMiddleware(logMiddleware("<--"));
 
 proxy.addSentMessageMiddleware(logMiddleware("-->"));
 
-proxy.onInit(function() {
+proxy.onInit(function () {
   console.log("onInit");
 });
 
-proxy.onDestroy(function() {
+proxy.onDestroy(function () {
   console.log("onDestroy");
 });

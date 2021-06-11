@@ -161,7 +161,7 @@ func (p *proxyImpl) ExecuteSendMessageMiddlewares(message *v8go.Value, rest ...*
 	return newExecuteMiddlewaresFunc(p.sendMessageMiddlewares)(message, rest...)
 }
 
-func newExecuteMiddlewaresFunc(middlewares []*v8go.Function) func(*v8go.Value, ...*v8go.Value) (*v8go.Value, error) {
+func newExecuteMiddlewaresFunc(middlewares []*v8go.Function) ExecuteMiddlewaresFn {
 	return func(message *v8go.Value, rest ...*v8go.Value) (*v8go.Value, error) {
 		prevMessage := message
 		for _, middleware := range middlewares {
