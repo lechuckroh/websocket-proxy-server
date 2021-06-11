@@ -145,14 +145,13 @@ func (s *sessionImpl) Start() {
 	}
 
 	s.logErrorf("connection closed: %v", errMsg)
-
 }
 
-func (s *sessionImpl) getFilenameGenerator(name string) FilenameGenerator {
+func (s *sessionImpl) getFilenameGenerator(typeName string) FilenameGenerator {
 	idx := 0
-	return func() string {
+	return func(ext string) string {
 		idx++
-		return fmt.Sprintf("%d_%s_%05d.txt", time.Now().Unix(), name, idx)
+		return fmt.Sprintf("%d_%s_%05d.%s", time.Now().Unix(), typeName, idx, ext)
 	}
 }
 
