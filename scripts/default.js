@@ -4,10 +4,13 @@ proxy.addReceivedMessageMiddleware(logMiddleware("<--"));
 
 proxy.addSentMessageMiddleware(logMiddleware("-->"));
 
+let timeoutID = 0;
 proxy.onInit(function () {
-  console.log("onInit");
+  timeoutID = setTimeout(() => {
+    console.log("5s elapsed.");
+  }, 5000);
 });
 
 proxy.onDestroy(function () {
-  console.log("onDestroy");
+  clearTimeout(timeoutID);
 });

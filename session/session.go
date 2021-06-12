@@ -71,30 +71,33 @@ type sessionImpl struct {
 	proxy      proxy.Proxy
 }
 
-func (s *sessionImpl) responseHttpError(msg string, err error, code int) {
-	http.Error(s.respWriter, fmt.Sprintf("%s: %v", msg, err), code)
-}
-
 func (s *sessionImpl) Start() {
 	connBackend, connClient, err := s.connectBackend()
 	if err != nil {
-		s.responseHttpError("failed to connect backend", err, http.StatusServiceUnavailable)
+		s.logErrorf("failed to connect backend: %v", err)
 		return
 	}
 
 	defer func() {
 		_ = connBackend.Close()
+		_ = connClient.Close()
+		s.log("session closed")
+
+		// onDestroy
+		if err := s.proxy.ExecuteOnDestroy(); err != nil {
+			s.logErrorf("failed to run onDestroy() function: %v", err)
+		}
 	}()
 
 	// initialize v8go
 	if ctx, err := initV8(); err != nil {
-		s.responseHttpError("failed to initialize v8", err, http.StatusInternalServerError)
+		s.logErrorf("failed to initialize v8: %v", err)
 		return
 	} else {
 		// inject proxy object
 		prx, err := proxy.InjectTo(ctx)
 		if err != nil {
-			s.responseHttpError("failed to inject proxy object", err, http.StatusInternalServerError)
+			s.logErrorf("failed to inject proxy object: %v", err)
 			return
 		}
 		s.v8Context = ctx
@@ -104,19 +107,24 @@ func (s *sessionImpl) Start() {
 
 	// run script
 	if err := s.runScript(); err != nil {
-		s.responseHttpError("failed to run script", err, http.StatusInternalServerError)
+		s.logErrorf("failed to run script: %v", err)
 		return
+	}
+
+	// onInit
+	if err := s.proxy.ExecuteOnInit(); err != nil {
+		s.logErrorf("failed to run onInit() function: %v", err)
 	}
 
 	// messageWriter
 	receiveMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("recv"))
 	sendMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("sent"))
 	if err := receiveMsgWriter.Init(); err != nil {
-		s.responseHttpError("failed to create receivedMsgWriter", err, http.StatusInternalServerError)
+		s.logErrorf("failed to create receivedMsgWriter: %v", err)
 		return
 	}
 	if err := sendMsgWriter.Init(); err != nil {
-		s.responseHttpError("failed to create sentMsgWriter", err, http.StatusInternalServerError)
+		s.logErrorf("failed to create sentMsgWriter: %v", err)
 		return
 	}
 
