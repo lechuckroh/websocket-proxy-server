@@ -13,7 +13,7 @@ declare namespace proxy {
 
   function addSentMessageMiddleware(...fn: Middleware[]);
 
-  function addReceiveMessageMiddleware(...fn: Middleware[]);
+  function addResponseToBackendMessageMiddleware(...fn: Middleware[]);
 
-  function addSendMessageMiddleware(...fn: Middleware[]);
+  function addResponseToClientMessageMiddleware(...fn: Middleware[]);
 }

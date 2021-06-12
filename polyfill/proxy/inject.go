@@ -27,12 +27,12 @@ func InjectTo(ctx *v8go.Context) (Proxy, error) {
 	setObjectFunctions := util.NewSetObjectFunctions(iso, proxyTpl)
 
 	if err := setObjectFunctions(map[string]v8go.FunctionCallback{
-		"onInit":                       proxy.GetOnInitFunctionCallback(),
-		"onDestroy":                    proxy.GetOnDestroyFunctionCallback(),
-		"addReceivedMessageMiddleware": proxy.GetAddReceivedMessageMiddlewareFunctionCallback(),
-		"addSentMessageMiddleware":     proxy.GetAddSentMessageMiddlewareFunctionCallback(),
-		"addReceiveMessageMiddleware":  proxy.GetAddReceiveMessageMiddlewareFunctionCallback(),
-		"addSendMessageMiddleware":     proxy.GetAddSendMessageMiddlewareFunctionCallback(),
+		"onInit":                                proxy.GetOnInitFunctionCallback(),
+		"onDestroy":                             proxy.GetOnDestroyFunctionCallback(),
+		"addReceivedMessageMiddleware":          proxy.GetAddReceivedMessageMiddlewareFunctionCallback(),
+		"addSentMessageMiddleware":              proxy.GetAddSentMessageMiddlewareFunctionCallback(),
+		"addResponseToBackendMessageMiddleware": proxy.GetAddResponseToBackendMessageMiddlewareFunctionCallback(),
+		"addResponseToClientMessageMiddleware":  proxy.GetAddResponseToClientMessageMiddlewareFunctionCallback(),
 	}); err != nil {
 		return nil, err
 	}

@@ -123,12 +123,12 @@ func (s *sessionImpl) Start() {
 	// forward received message
 	errClientCh := make(chan error, 1)
 	go s.forwardMessage(connBackend, connClient, errClientCh,
-		s.proxy.ExecuteReceivedMessageMiddlewares, s.proxy.ExecuteSendMessageMiddlewares,
+		s.proxy.ExecuteReceivedMessageMiddlewares, s.proxy.ExecuteResponseToBackendMessageMiddlewares,
 		receiveMsgWriter, sendMsgWriter)
 	// forward sent message
 	errBackendCh := make(chan error, 1)
 	go s.forwardMessage(connClient, connBackend, errBackendCh,
-		s.proxy.ExecuteSentMessageMiddlewares, s.proxy.ExecuteReceiveMessageMiddlewares,
+		s.proxy.ExecuteSentMessageMiddlewares, s.proxy.ExecuteResponseToClientMessageMiddlewares,
 		sendMsgWriter, receiveMsgWriter)
 
 	// wait for errors

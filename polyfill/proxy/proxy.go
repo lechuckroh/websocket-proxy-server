@@ -14,13 +14,13 @@ type Proxy interface {
 	GetAddReceivedMessageMiddlewareFunctionCallback() v8go.FunctionCallback
 	GetAddSentMessageMiddlewareFunctionCallback() v8go.FunctionCallback
 
-	GetAddReceiveMessageMiddlewareFunctionCallback() v8go.FunctionCallback
-	GetAddSendMessageMiddlewareFunctionCallback() v8go.FunctionCallback
+	GetAddResponseToBackendMessageMiddlewareFunctionCallback() v8go.FunctionCallback
+	GetAddResponseToClientMessageMiddlewareFunctionCallback() v8go.FunctionCallback
 
 	ExecuteReceivedMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
 	ExecuteSentMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
-	ExecuteReceiveMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
-	ExecuteSendMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
+	ExecuteResponseToBackendMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
+	ExecuteResponseToClientMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
 
 	ExecuteOnInit() error
 	ExecuteOnDestroy() error
@@ -33,8 +33,8 @@ type proxyImpl struct {
 	receivedMessageMiddlewares []*v8go.Function
 	sentMessageMiddlewares     []*v8go.Function
 
-	receiveMessageMiddlewares []*v8go.Function
-	sendMessageMiddlewares    []*v8go.Function
+	responseToBackendMessageMiddlewares []*v8go.Function
+	responseToClientMessageMiddlewares  []*v8go.Function
 }
 
 func NewProxy() Proxy {
@@ -113,32 +113,32 @@ func (p *proxyImpl) GetAddSentMessageMiddlewareFunctionCallback() v8go.FunctionC
 	}
 }
 
-func (p *proxyImpl) GetAddReceiveMessageMiddlewareFunctionCallback() v8go.FunctionCallback {
+func (p *proxyImpl) GetAddResponseToBackendMessageMiddlewareFunctionCallback() v8go.FunctionCallback {
 	return func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		args := info.Args()
 		for i, arg := range args {
 			middleware, err := arg.AsFunction()
 			if err != nil {
-				log.Printf("[ERR] addReceiveMessageMiddleware() args[%d] is not function: %v", i, err)
+				log.Printf("[ERR] addResponseToBackendMessageMiddleware() args[%d] is not function: %v", i, err)
 				continue
 			}
-			p.receiveMessageMiddlewares = append(p.receiveMessageMiddlewares, middleware)
+			p.responseToBackendMessageMiddlewares = append(p.responseToBackendMessageMiddlewares, middleware)
 		}
 
 		return nil
 	}
 }
 
-func (p *proxyImpl) GetAddSendMessageMiddlewareFunctionCallback() v8go.FunctionCallback {
+func (p *proxyImpl) GetAddResponseToClientMessageMiddlewareFunctionCallback() v8go.FunctionCallback {
 	return func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		args := info.Args()
 		for i, arg := range args {
 			middleware, err := arg.AsFunction()
 			if err != nil {
-				log.Printf("[ERR] addSendMessageMiddleware() args[%d] is not function: %v", i, err)
+				log.Printf("[ERR] addResponseToClientMessageMiddleware() args[%d] is not function: %v", i, err)
 				continue
 			}
-			p.sendMessageMiddlewares = append(p.sendMessageMiddlewares, middleware)
+			p.responseToClientMessageMiddlewares = append(p.responseToClientMessageMiddlewares, middleware)
 		}
 
 		return nil
@@ -153,12 +153,12 @@ func (p *proxyImpl) ExecuteSentMessageMiddlewares(message *v8go.Value, rest ...*
 	return newExecuteMiddlewaresFunc(p.sentMessageMiddlewares)(message, rest...)
 }
 
-func (p *proxyImpl) ExecuteReceiveMessageMiddlewares(message *v8go.Value, rest ...*v8go.Value) (*v8go.Value, error) {
-	return newExecuteMiddlewaresFunc(p.receiveMessageMiddlewares)(message, rest...)
+func (p *proxyImpl) ExecuteResponseToBackendMessageMiddlewares(message *v8go.Value, rest ...*v8go.Value) (*v8go.Value, error) {
+	return newExecuteMiddlewaresFunc(p.responseToBackendMessageMiddlewares)(message, rest...)
 }
 
-func (p *proxyImpl) ExecuteSendMessageMiddlewares(message *v8go.Value, rest ...*v8go.Value) (*v8go.Value, error) {
-	return newExecuteMiddlewaresFunc(p.sendMessageMiddlewares)(message, rest...)
+func (p *proxyImpl) ExecuteResponseToClientMessageMiddlewares(message *v8go.Value, rest ...*v8go.Value) (*v8go.Value, error) {
+	return newExecuteMiddlewaresFunc(p.responseToClientMessageMiddlewares)(message, rest...)
 }
 
 func newExecuteMiddlewaresFunc(middlewares []*v8go.Function) ExecuteMiddlewaresFn {

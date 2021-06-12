@@ -49,23 +49,23 @@ func TestInjectTo(t *testing.T) {
 				return msg + '2';
 			},
 		);
-		proxy.addReceiveMessageMiddleware(
+		proxy.addResponseToBackendMessageMiddleware(
 			function(msg) { 
-				console.log('receiveMessage1 ' + msg);
+				console.log('responseToBackend1 ' + msg);
 				return msg + '1';
 			},
 			function(msg) { 
-				console.log('receiveMessage2 ' + msg);
+				console.log('responseToBackend2 ' + msg);
 				return msg + '2';
 			},
 		);
-		proxy.addSendMessageMiddleware(
+		proxy.addResponseToClientMessageMiddleware(
 			function(msg) { 
-				console.log('sendMessage1 ' + msg);
+				console.log('responseToClient1 ' + msg);
 				return msg + '1';
 			},
 			function(msg) { 
-				console.log('sendMessage2 ' + msg);
+				console.log('responseToClient2 ' + msg);
 				return msg + '2';
 			},
 		);
@@ -78,8 +78,8 @@ func TestInjectTo(t *testing.T) {
 	msg, _ := v8go.NewValue(iso, "foo")
 
 	_ = proxy.ExecuteOnInit()
-	_, _ = proxy.ExecuteReceiveMessageMiddlewares(msg)
-	_, _ = proxy.ExecuteSendMessageMiddlewares(msg)
+	_, _ = proxy.ExecuteResponseToBackendMessageMiddlewares(msg)
+	_, _ = proxy.ExecuteResponseToClientMessageMiddlewares(msg)
 	_, _ = proxy.ExecuteReceivedMessageMiddlewares(msg)
 	_, _ = proxy.ExecuteSentMessageMiddlewares(msg)
 	_ = proxy.ExecuteOnDestroy()
@@ -87,10 +87,10 @@ func TestInjectTo(t *testing.T) {
 	// assert log messages
 	expectedLogMessage := strings.Join([]string{
 		"onInit",
-		"receiveMessage1 foo",
-		"receiveMessage2 foo1",
-		"sendMessage1 foo",
-		"sendMessage2 foo1",
+		"responseToBackend1 foo",
+		"responseToBackend2 foo1",
+		"responseToClient1 foo",
+		"responseToClient2 foo1",
 		"receivedMessage1 foo",
 		"receivedMessage2 foo1",
 		"sentMessage1 foo",
