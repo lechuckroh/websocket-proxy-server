@@ -22,7 +22,7 @@ type Proxy interface {
 	ExecuteResponseToBackendMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
 	ExecuteResponseToClientMessageMiddlewares(*v8go.Value, ...*v8go.Value) (*v8go.Value, error)
 
-	ExecuteOnInit() error
+	ExecuteOnInit(responseToBackend, responseToClient *v8go.Function) error
 	ExecuteOnDestroy() error
 }
 
@@ -183,9 +183,9 @@ func newExecuteMiddlewaresFunc(middlewares []*v8go.Function) ExecuteMiddlewaresF
 	}
 }
 
-func (p *proxyImpl) ExecuteOnInit() error {
+func (p *proxyImpl) ExecuteOnInit(responseToBackend, responseToClient *v8go.Function) error {
 	if p.initFn != nil {
-		_, err := p.initFn.Call()
+		_, err := p.initFn.Call(responseToBackend, responseToClient)
 		if err != nil {
 			return err
 		}

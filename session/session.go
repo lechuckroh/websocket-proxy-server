@@ -111,11 +111,6 @@ func (s *sessionImpl) Start() {
 		return
 	}
 
-	// onInit
-	if err := s.proxy.ExecuteOnInit(); err != nil {
-		s.logErrorf("failed to run onInit() function: %v", err)
-	}
-
 	// messageWriter
 	receiveMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("recv"))
 	sendMsgWriter := NewMessageWriter(s.recordDir, s.sessionID, s.getFilenameGenerator("sent"))
@@ -128,13 +123,30 @@ func (s *sessionImpl) Start() {
 		return
 	}
 
-	// forward received message
+	// responseFunc
+	errBackendCh := make(chan error, 1)
+	resToBackendFn, err := s.newResponseFunction(connBackend, errBackendCh, s.proxy.ExecuteResponseToBackendMessageMiddlewares, sendMsgWriter)
+	if err != nil {
+		s.logErrorf("failed to register responseFunc to backend: %v", err)
+		return
+	}
 	errClientCh := make(chan error, 1)
+	resToClientFn, err := s.newResponseFunction(connClient, errClientCh, s.proxy.ExecuteResponseToClientMessageMiddlewares, receiveMsgWriter)
+	if err != nil {
+		s.logErrorf("failed to register responseFunc to client: %v", err)
+		return
+	}
+
+	// onInit
+	if err := s.proxy.ExecuteOnInit(resToBackendFn, resToClientFn); err != nil {
+		s.logErrorf("failed to run onInit() function: %v", err)
+	}
+
+	// forward received message
 	go s.forwardMessage(connBackend, connClient, errClientCh,
 		s.proxy.ExecuteReceivedMessageMiddlewares, s.proxy.ExecuteResponseToBackendMessageMiddlewares,
 		receiveMsgWriter, sendMsgWriter)
 	// forward sent message
-	errBackendCh := make(chan error, 1)
 	go s.forwardMessage(connClient, connBackend, errBackendCh,
 		s.proxy.ExecuteSentMessageMiddlewares, s.proxy.ExecuteResponseToClientMessageMiddlewares,
 		sendMsgWriter, receiveMsgWriter)
@@ -213,18 +225,13 @@ func (s *sessionImpl) connectBackend() (*websocket.Conn, *websocket.Conn, error)
 	return connBackend, connClient, nil
 }
 
-// forwardMessage forwards messages.
-// Send error to errCh on connection closed.
-func (s *sessionImpl) forwardMessage(
-	fromConn, toConn *websocket.Conn,
+// newResponseFunction creates a responseFunc.
+func (s *sessionImpl) newResponseFunction(
+	conn *websocket.Conn,
 	errCh chan error,
-	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
 	executeResponseMiddlewaresFn proxy.ExecuteMiddlewaresFn,
-	receiveMessageWriter MessageWriter,
-	responseMessageWriter MessageWriter,
-) {
-	// create responseFunc
-	var resFn *v8go.Value
+	msgWriter MessageWriter,
+) (*v8go.Function, error) {
 	if resFnTpl, err := v8go.NewFunctionTemplate(s.iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		args := info.Args()
 		if len(args) != 1 {
@@ -245,13 +252,13 @@ func (s *sessionImpl) forwardMessage(
 			return nil
 		}
 
-		if err := responseMessageWriter.WriteValue(result); err != nil {
+		if err := msgWriter.WriteValue(result); err != nil {
 			s.logErrorf("failed to record message: %v", err)
 			errCh <- err
 			return nil
 		}
 
-		if err := s.sendMessage(fromConn, result); err != nil {
+		if err := s.sendMessage(conn, result); err != nil {
 			s.logErrorf("responseFunc failed: %v", err)
 			return nil
 		}
@@ -259,9 +266,29 @@ func (s *sessionImpl) forwardMessage(
 		return nil
 	}); err != nil {
 		s.logErrorf("failed to register responseFunc: %v", err)
-		return
+		return nil, err
 	} else {
-		resFn = resFnTpl.GetFunction(s.v8Context).Value
+		resFn := resFnTpl.GetFunction(s.v8Context)
+		return resFn, nil
+	}
+
+}
+
+// forwardMessage forwards messages.
+// Send error to errCh on connection closed.
+func (s *sessionImpl) forwardMessage(
+	fromConn, toConn *websocket.Conn,
+	errCh chan error,
+	executeMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+	executeResponseMiddlewaresFn proxy.ExecuteMiddlewaresFn,
+	receiveMessageWriter MessageWriter,
+	responseMessageWriter MessageWriter,
+) {
+	// create responseFunc
+	resFn, err := s.newResponseFunction(fromConn, errCh, executeResponseMiddlewaresFn, responseMessageWriter)
+	if err != nil {
+		s.logErrorf("failed to register responseFunc: %v", err)
+		return
 	}
 
 	for {
@@ -280,7 +307,7 @@ func (s *sessionImpl) forwardMessage(
 
 		switch msgType {
 		case websocket.TextMessage:
-			if ok := s.forwardTextMessage(toConn, readMsgBytes, executeMiddlewaresFn, resFn); !ok {
+			if ok := s.forwardTextMessage(toConn, readMsgBytes, executeMiddlewaresFn, resFn.Value); !ok {
 				return
 			}
 		default:

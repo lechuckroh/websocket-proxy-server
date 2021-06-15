@@ -27,7 +27,11 @@ func TestInjectTo(t *testing.T) {
 
 	// run script
 	script := `
-		proxy.onInit(function() { console.log('onInit'); });
+		proxy.onInit(function(resToBackend, resToClient) { 
+			console.log('onInit');
+			resToBackend('resToBackend');
+			resToClient('resToClient');
+		});
 		proxy.onDestroy(function() { console.log('onDestroy'); });
 		proxy.addReceivedMessageMiddleware(
 			function(msg) { 
@@ -74,10 +78,23 @@ func TestInjectTo(t *testing.T) {
 		t.Error(err)
 	}
 
-	// call proxy functions
-	msg, _ := v8go.NewValue(iso, "foo")
+	var resMessagesToBackend []string
+	resToBackendTpl, _ := v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+		resMessagesToBackend = append(resMessagesToBackend, info.Args()[0].String())
+		return nil
+	})
 
-	_ = proxy.ExecuteOnInit()
+	var resMessagesToClient []string
+	resToClientTpl, _ := v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+		resMessagesToClient = append(resMessagesToClient, info.Args()[0].String())
+		return nil
+	})
+
+	// call proxy functions
+	resToBackend := resToBackendTpl.GetFunction(ctx)
+	resToClient := resToClientTpl.GetFunction(ctx)
+	msg, _ := v8go.NewValue(iso, "foo")
+	_ = proxy.ExecuteOnInit(resToBackend, resToClient)
 	_, _ = proxy.ExecuteResponseToBackendMessageMiddlewares(msg)
 	_, _ = proxy.ExecuteResponseToClientMessageMiddlewares(msg)
 	_, _ = proxy.ExecuteReceivedMessageMiddlewares(msg)
@@ -99,6 +116,15 @@ func TestInjectTo(t *testing.T) {
 		"",
 	}, "\n")
 	logMessage := logBuf.String()
+
+	// assert onInit() responseToBackend function called
+	if len(resMessagesToBackend) != 1 || resMessagesToBackend[0] != "resToBackend" {
+		t.Errorf("resMessagesToBackend mismatch: %v", resMessagesToBackend)
+	}
+	// assert onInit() responseToClient function called
+	if len(resMessagesToClient) != 1 || resMessagesToClient[0] != "resToClient" {
+		t.Errorf("resMessagesToClient mismatch: %v", resMessagesToClient)
+	}
 
 	if logMessage != expectedLogMessage {
 		t.Errorf("actual logMessages: %s", logMessage)
