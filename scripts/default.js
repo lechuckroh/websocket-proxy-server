@@ -1,8 +1,8 @@
-import {logMiddleware} from "./middleware/log";
+import {getLogger} from "./middleware/log";
 
-proxy.addReceivedMessageMiddleware(logMiddleware("<--"));
+proxy.addReceivedMessageMiddleware(getLogger("<--"));
 
-proxy.addSentMessageMiddleware(logMiddleware("-->"));
+proxy.addSentMessageMiddleware(getLogger("-->"));
 
 let timeoutID = 0;
 proxy.onInit(function () {
