@@ -1,0 +1,15 @@
+@startuml
+"Client" -> "ProxyServer" : Connect
+"ProxyServer" -> "Backend" : Connect
+"ProxyServer" -> "ProxyServer" : 1) onInit()
+"Client" -> "ProxyServer" : 2) Send message
+"ProxyServer" -> "Backend" : sentMessageMiddleware
+"Backend" -> "ProxyServer" : 3) Receive message
+"ProxyServer" -> "Client" : receivedMessageMiddleware
+"Client" -> "ProxyServer" : 4) Send message
+"ProxyServer" -> "Client" : responseToClientMessageMiddleware
+"ProxyServer" <- "Backend" : 5) Receive message
+"ProxyServer" -> "Backend" : responseToBackendMessageMiddleware
+"Client" X-X "ProxyServer" : 6) onDestroy()
+"ProxyServer" X-X "Backend" : 6) onDestroy()
+@enduml
